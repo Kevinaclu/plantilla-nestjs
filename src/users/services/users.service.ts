@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Client } from 'pg';
+import * as bcrypt from 'bcrypt';
 
 import { User } from '../entities/user.entity';
 import { Order } from '../entities/order.entity';
@@ -38,8 +39,15 @@ export class UsersService {
     return user;
   }
 
+  async findByEmail(email: string) {
+    return this.userRepo.findOne({ where: { email } });
+  }
+
   async create(data: CreateUserDto) {
     const newUser = this.userRepo.create(data);
+    const hashPassword = await bcrypt.hash(newUser.password, 10);
+    newUser.password = hashPassword;
+
     if (data.customerId) {
       const customer = await this.customersService.findOne(data.customerId);
       newUser.customer = customer;
@@ -50,7 +58,11 @@ export class UsersService {
   async update(id: number, changes: UpdateUserDto) {
     const user = await this.findOne(id);
     this.userRepo.merge(user, changes);
-    return this.userRepo.save(user);
+    if (changes.customerId) {
+      const customer = await this.customersService.findOne(changes.customerId);
+      user.customer = customer;
+    }
+    return await this.userRepo.save(user);
   }
 
   remove(id: number) {
